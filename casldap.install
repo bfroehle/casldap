@@ -1,0 +1,30 @@
+<?php
+// $Id$
+
+/**
+ * Implements hook_requirements().
+ */
+function casldap_requirements($phase) {
+  $requirements = array();
+  // Ensure translations don't break at install time
+  $t = get_t();
+
+  // Check for LDAP
+  if (!function_exists('ldap_connect')) {
+    $requirements['ldap'] = array(
+      'severity' => REQUIREMENT_ERROR,
+      'value' => $t('Not Installed'),
+      'description' => $t('The LDAP library for PHP is missing or outdated. Check the <a href="@url">PHP Lightweight Directory Access Protocol documentation</a> for information on how to correct this.', array('@url' => 'http://www.php.net/manual/book.ldap.php')),
+    );
+  }
+  else {
+    $requirements['ldap'] = array(
+      'severity' => REQUIREMENT_OK,
+      'value' => $t('Installed'),
+    );
+  }
+  $requirements['ldap']['title'] = $t('LDAP library'); 
+
+  return $requirements;
+}
+

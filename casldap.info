@@ -1,0 +1,11 @@
+; $Id$
+name = cas (LDAP Integation)
+core = 7.x
+description = "Populates new CAS user accounts with attributes from LDAP."
+
+files[]=casldap.module
+files[]=casldap.admin.inc
+files[]=casldap.install
+
+dependencies = cas
+configure = admin/config/people/cas/ldap

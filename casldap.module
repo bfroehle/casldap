@@ -1,0 +1,97 @@
+<?php
+// $Id$
+
+// hook_menu
+function casldap_menu() {
+  $items = array();
+  
+  $items['admin/config/people/cas/settings'] = array(
+    'title' => 'CAS',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  
+  $items['admin/config/people/cas/ldap'] = array(
+    'title' => 'LDAP',
+    'description' => 'Manage the relationship between LDAP entries and Drupal fields.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('casldap_admin_settings'),
+    'access arguments' => array('administer cas'),
+    'file' => 'casldap.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -8,
+  );
+  
+  return $items;
+}
+
+/**
+ * Implements hook_user_presave.
+ */
+
+function casldap_user_presave(&$edit, $account, $category) {
+  if (!$account->is_new || $category != 'account')
+    return;
+
+  // Ensure that they are coming from the CAS module
+  if (!isset($_SESSION['cas_first_login']) || !$_SESSION['cas_first_login'])
+    return;
+
+  if (!function_exists('ldap_connect')) {
+     watchdog('casldap', t('The LDAP library for PHP is missing or outdated. Check the <a href="@url">PHP Lightweight Directory Access Protocol documentation</a> for information on how to correct this.', array('@url' => 'http://www.php.net/manual/book.ldap.php')),WATCHDOG_ERROR);
+  }
+
+  $casldap_relations = variable_get('casldap_relations','');
+
+  $ldap_attributes = array();
+  foreach ($casldap_relations as $drupal_field => $ldap_attribute) {
+    if ($ldap_attribute != '')
+      $ldap_attributes[] = $ldap_attribute;
+  }
+  
+  if (empty($ldap_attributes))
+    return;
+  
+  // Get configuration settings:
+  $ldap_server = variable_get('casldap_ldap_server', '');
+  $ldap_port = variable_get('casldap_ldap_port', '389');
+  $base_dn = variable_get('casldap_ldap_basedn', '');
+  $filter = variable_get('casldap_ldap_user_attribute', 'uid').'='.$edit['name'];
+  
+  $ldap_connection = ldap_connect($ldap_server, $ldap_port);
+  if (!$ldap_connection) {
+    watchdog('casldap', 'LDAP Connect failure to @server:@port', array('@server' => $ldap_server, '@port' => $ldap_port), WATCHDOG_ERROR);
+    return;
+  }
+  
+  $ldap_result = ldap_search($ldap_connection, $base_dn, $filter, $ldap_attributes);
+  if (ldap_count_entries($ldap_connection, $ldap_result) != 1) {
+    watchdog('casldap', 'LDAP returned multiple entries for @filter on @server:@port', array('@filter' => $filter, '@server' => $ldap_server, '@port' => $ldap_port), WATCHDOG_ERROR);
+    return;
+  }
+  
+  $entries = ldap_get_entries($ldap_connection, $ldap_result);
+  $attributes = $entries[0];
+  
+  // Handle mail:
+  foreach ($casldap_relations as $drupal_field => $ldap_attribute) {
+    if ($ldap_attribute == '')
+      continue;
+    
+    // ldap_get_entries makes all attributes lowercase
+    $ldap_attribute = strtolower($ldap_attribute);
+    
+    if (!isset($attributes[$ldap_attribute][0])) {
+      watchdog('casldap', 'LDAP was not able to find attribute @attribute for @filter on @server:@port', array('@attribute' => $ldap_attribute, '@filter' => $filter, '@server' => $ldap_server, '@port' => $ldap_port), WATCHDOG_ERROR);
+      continue;      
+    }
+    
+    if ($drupal_field == 'mail') {
+      $edit[$drupal_field] = $attributes[$ldap_attribute][0];
+    }
+    else {
+      $edit[$drupal_field][LANGUAGE_NONE][0]['value'] = $attributes[$ldap_attribute][0];
+    }
+  }
+  // watchdog('casldap', 'Successfully populated user @name using @filter on @server:@port', array('@name' => $edit['name'], '@filter' => $filter, '@server' => $ldap_server, '@port' => $ldap_port));
+}
