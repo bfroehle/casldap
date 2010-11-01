@@ -41,52 +41,46 @@ function casldap_user_presave(&$edit, $account, $category) {
      watchdog('casldap', t('The LDAP library for PHP is missing or outdated. Check the <a href="@url">PHP Lightweight Directory Access Protocol documentation</a> for information on how to correct this.', array('@url' => 'http://www.php.net/manual/book.ldap.php')),WATCHDOG_ERROR);
   }
 
-  $casldap_relations = variable_get('casldap_relations','');
-
-  $ldap_attributes = array();
-  foreach ($casldap_relations as $drupal_field => $ldap_attribute) {
-    if ($ldap_attribute != '')
-      $ldap_attributes[] = $ldap_attribute;
-  }
-  
-  if (empty($ldap_attributes))
-    return;
-  
   // Get configuration settings:
+  $casldap_relations = variable_get('casldap_relations','');
   $ldap_server = variable_get('casldap_ldap_server', '');
   $ldap_port = variable_get('casldap_ldap_port', '389');
   $base_dn = variable_get('casldap_ldap_basedn', '');
   $filter = variable_get('casldap_ldap_user_attribute', 'uid').'='.$edit['name'];
-  
+
   $ldap_connection = ldap_connect($ldap_server, $ldap_port);
   if (!$ldap_connection) {
     watchdog('casldap', 'LDAP Connect failure to @server:@port', array('@server' => $ldap_server, '@port' => $ldap_port), WATCHDOG_ERROR);
     return;
   }
-  
-  $ldap_result = ldap_search($ldap_connection, $base_dn, $filter, $ldap_attributes);
+
+  $ldap_result = ldap_search($ldap_connection, $base_dn, $filter, array_values($casldap_relations));
   if (ldap_count_entries($ldap_connection, $ldap_result) != 1) {
     watchdog('casldap', 'LDAP returned multiple entries for @filter on @server:@port', array('@filter' => $filter, '@server' => $ldap_server, '@port' => $ldap_port), WATCHDOG_ERROR);
     return;
   }
-  
+
   $entries = ldap_get_entries($ldap_connection, $ldap_result);
   $attributes = $entries[0];
-  
+
   // Handle mail:
   foreach ($casldap_relations as $drupal_field => $ldap_attribute) {
     if ($ldap_attribute == '')
       continue;
-    
+
+    // Only allow changing the name of user if we're using CAS_AUTHMAP_EXTERNAL
+    if ($drupal_field == 'name' && variable_get('cas_authmap',0) != 0)
+      continue;
+
     // ldap_get_entries makes all attributes lowercase
     $ldap_attribute = strtolower($ldap_attribute);
-    
+
     if (!isset($attributes[$ldap_attribute][0])) {
       watchdog('casldap', 'LDAP was not able to find attribute @attribute for @filter on @server:@port', array('@attribute' => $ldap_attribute, '@filter' => $filter, '@server' => $ldap_server, '@port' => $ldap_port), WATCHDOG_ERROR);
       continue;      
     }
-    
-    if ($drupal_field == 'mail') {
+
+    if ($drupal_field == 'name' || $drupal_field == 'mail') {
       $edit[$drupal_field] = $attributes[$ldap_attribute][0];
     }
     else {

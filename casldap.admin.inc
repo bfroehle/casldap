@@ -49,7 +49,7 @@ function casldap_admin_settings() {
   module_load_include('inc', 'field_ui', 'field_ui.admin');  
 
   $instances = field_info_instances('user', 'user');
-  
+
   $casldap_relations = variable_get('casldap_relations','');
   
   $form['relations'] = array(
@@ -74,6 +74,18 @@ function casldap_admin_settings() {
     '#tree' => TRUE,
     '#type' => null,
   );
+
+  if (variable_get('cas_authmap',0) == 0) {
+    // Only allow changing the name of user if we're using CAS_AUTHMAP_EXTERNAL
+    $form['relations']['casldap_relations']['name'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Username'),
+      '#default_value' => isset($casldap_relations['name']) ? $casldap_relations['name'] : '',
+      '#size' => 50,
+      '#description' => t('The LDAP attribute containing the account username.'),
+    );
+  }
+
   $form['relations']['casldap_relations']['mail'] = array(
     '#type' => 'textfield',
     '#title' => t('E-mail address'),
